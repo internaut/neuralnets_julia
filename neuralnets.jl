@@ -7,8 +7,10 @@
 #
 
 using LinearAlgebra  # for dot
+using AutoGrad
 
-# first goal: determine the "brightness" of a 2x2 pixels image using a simple "neural network"
+
+# determine the "brightness" of a 2x2 pixels image using a simple "neural network"
 #
 # this is basically the mean of the input pixels and can be easily implemented by hand (dividing all values by 4 and
 # summing) but we want a neural net to find these "weights" (1/4) for each input pixel
@@ -52,36 +54,60 @@ mean = x -> sum(x) / length(x)   # defines a mean function
 N_TRAINING_SAMPLES = 1000
 
 # preallocate data
-train_data = Vector{Vector{Float64}}(undef, N_TRAINING_SAMPLES)   # this is probably not the right prealloc.
+#train_data = Vector{Vector{Float64}}(undef, N_TRAINING_SAMPLES)   # this is probably not the right prealloc.
+train_data = Matrix{Float64}(undef, (N_TRAINING_SAMPLES, 4))
 train_output = Vector{Float64}(undef, N_TRAINING_SAMPLES)
 
 for i in 1:N_TRAINING_SAMPLES
     d = rand(Float64, 4)   # random vector with values in [0, 1)
-    train_data[i] = d
+    train_data[i, :] = d
     train_output[i] = mean(d)
 end
 
-# we define a loss function that measures the quality of the current model; we use the mean squared error
+# we define a loss function that measures the quality of the current model; we use the mean squared error (MSE)
 
 # x are the actual values, x_hat the predicted values
 # note the dots before "-" and "^" operations; they denote that the elementwise operations (the inputs are vectors)
 # should be performed
 mean_squared_error = (x_hat, x) -> mean((x .- x_hat).^2)
 
+# we define a model; this is simply the weighted sum of the input rows
+model = (input_data, weights) -> input_data * weights      # matrix multiplication; equiv. to the following:
+#model = (input_data, weights) -> [dot(input_data[i, :], weights) for i in 1:size(input_data)[1]]
 
-model = (input_data, weights) -> dot(input_data, weights)
+# no we define the training function; it takes training data, known training outcomes, the current layer weights and
+# a learning rate for the stochastic gradient descend (SGD);
+# the function modifies "weights" in-place and returns the current loss
+function train(data, outcomes, weights, learningrate=0.1)
+    # we define our model as partial function in terms of its parameters, i.e. the weights; the data is "fixed";
+    # this is very important so that we later can get the gradients of the loss function w.r.t. to the weights
+    model_train = weights -> model(data, weights)
 
-function train(data, weights)
-    outputs = Vector{Float64}(undef, length(data))
-    for (i, d) in enumerate(data)
-        outputs[i] = model(d, weights)
+    # we define the loss function w.r.t. the weights as MSE of the model predictions and the known outcomes
+    loss = (weights, outcomes) -> mean_squared_error(model_train(weights), outcomes)
+
+    # wrap the loss function via "grad" to be able to retrieve the gradients of the loss w.r.t. to the weights
+    grad_loss = grad(loss)
+    
+    # get the gradients of the loss w.r.t. each weight parameter, i.e. this is a vector of length 4
+    g = grad_loss(hidden_layer, train_output)
+    
+    # update the weights via gradient descend
+    # "i_w" is the weight parameter index, "g_w" is the loss gradient of the weight
+    for (i_w, g_w) in enumerate(g)
+        weights[i_w] -= learningrate * g_w
     end
 
-    outputs
+    # return the current model's loss
+    return loss(weights, outcomes)
 end
 
-predictions = train(train_data, [0.98, 0.4, 0.86, -0.08])
+# randomly initialize the hidden layer weights
+hidden_layer = randn(Float64, 4)
 
-# quite bad MSE for the above weights:
-mean_squared_error(predictions, train_output)
+# apply the training; the "hidden_layer" weights are adjusted on each training iteration (epoch) to lower the loss
+for i in 1:300
+    current_loss = train(train_data, train_output, hidden_layer)
+    println(i, ": loss = ", round(current_loss, digits=5), " weights = ", round.(hidden_layer, digits=4))
+end
 
