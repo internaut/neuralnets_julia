@@ -111,3 +111,24 @@ for i in 1:300
     println(i, ": loss = ", round(current_loss, digits=5), " weights = ", round.(hidden_layer, digits=4))
 end
 
+# we can see that the training results in the hidden layer weights coming closer and closer to the "correct" solution
+# [0.25, 0.25, 0.25, 0.25] and hence the loss decreasing towards zero; so this is basically an approximation of a
+# "mean" function trained from data with known outcomes; we can also learn any other function:
+
+true_weights = [0.0, 0.5, 0.1, 0.4]
+
+train_data = Matrix{Float64}(undef, (N_TRAINING_SAMPLES, 4))
+train_output = Vector{Float64}(undef, N_TRAINING_SAMPLES)
+
+for i in 1:N_TRAINING_SAMPLES
+    d = rand(Float64, 4)   # random vector with values in [0, 1)
+    train_data[i, :] = d
+    train_output[i] = dot(d, true_weights)
+end
+
+for i in 1:300
+    current_loss = train(train_data, train_output, hidden_layer)
+    println(i, ": loss = ", round(current_loss, digits=5), " weights = ", round.(hidden_layer, digits=4))
+end
+
+# again, this recovers the "true_weights" quiet accurately
